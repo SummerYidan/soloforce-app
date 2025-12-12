@@ -115,7 +115,9 @@ if not st.session_state.analysis_done:
     user_idea = st.text_area("输入你的创业想法：", height=100, placeholder="例如：我想做一个帮助内向者练习演讲的 VR 工具...")
     
     if st.button("开始深度分析") and api_key and user_idea:
+        st.session_state.user_idea = user_idea  # <--- 🔥 必须加这一行！保存点子
         with st.spinner(f'正在结合 {user_mbti} 性格进行深度剖析...'):
+            # ... 下面是 prompt ...
             
             initial_prompt = f"""
             你是一位精通商业分析和心理学的创业导师。
@@ -275,11 +277,13 @@ else:
     
     if st.session_state.analysis_done:
         # 1. 拼接要导出的文本内容
+        # 确保 user_idea 存在（为了防止极端情况，加个默认值）
+        saved_idea = st.session_state.get("user_idea", "未记录")
         report_content = f"""
 # 🚀 SoloForce 创业深度评估报告
 
 ## 1. 基本信息
-- **创业点子**: {user_idea}
+- **创业点子**: {saved_idea}
 - **创业者性格**: {user_mbti}
 - **评估时间**: 2025年...
 
