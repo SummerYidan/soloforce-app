@@ -191,6 +191,70 @@ else:
                 st.markdown(response)
         st.session_state.messages.append({"role": "assistant", "content": response})
 
+# --- 9. 新增功能：生成执行计划 (v3.0 雏形) ---
+    st.markdown("---")
+    st.subheader("🗓️ 你的行动蓝图")
+    
+    # 只有当分析做完，且还没有生成过计划时，才显示按钮
+    if st.session_state.analysis_done:
+        if "action_plan" not in st.session_state:
+            st.session_state.action_plan = None
+
+        if st.button("🚀 把这个计划变成 '7天执行清单'"):
+            with st.spinner("AI 正在为你拆解任务，生成甘特图..."):
+                # 这是一个新的 Prompt，专门用来拆解任务
+                plan_prompt = f"""
+                基于之前的创业点子分析和 MBTI 性格（{user_mbti}），
+                请为我生成一个极其具体的“7天启动清单”。
+                
+                要求：
+                1. 任务必须非常微小、可执行（Actionable）。
+                2. 结合 MBTI 特点（例如 INTJ 多做规划，ENFP 多做社交）。
+                3. 每天 1 个核心任务。
+                
+                请严格返回以下 JSON 格式：
+                [
+                    {{"day": 1, "task": "具体的任务内容...", "reason": "为什么先做这个"}},
+                    {{"day": 2, "task": "...", "reason": "..."}},
+                    ...
+                ]
+                """
+                
+                # 调用 AI
+                # 注意：这里我们把新的 prompt 加入到对话历史中，这样 AI 知道上下文
+                st.session_state.messages.append({"role": "user", "content": plan_prompt})
+                response_text = call_gemini(st.session_state.messages)
+                
+                # 提取 JSON
+                plan_data = extract_json(response_text)
+                
+                if plan_data:
+                    st.session_state.action_plan = plan_data
+                    # 把 AI 的回复也存进去，保持对话连贯
+                    st.session_state.messages.append({"role": "assistant", "content": "我已经为你生成了7天行动计划，请看下方👇"})
+                    st.rerun()
+                else:
+                    st.error("生成计划失败，请重试。")
+        
+        # 展示计划（如果有的话）
+        if st.session_state.action_plan:
+            st.info("💡 这是一个基于你性格定制的 Launch Plan。请尝试每完成一项就打个勾。")
+            
+            for item in st.session_state.action_plan:
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    st.markdown(f"**Day {item['day']}**")
+                with col2:
+                    # 使用 checkbox，虽然刷新会重置，但能模拟“打卡”的感觉
+                    done = st.checkbox(f"{item['task']}", key=f"task_{item['day']}")
+                    if done:
+                        st.caption(f"✅ 干得漂亮！(设计意图：{item['reason']})")
+                    else:
+                        st.caption(f"🎯 目标：{item['reason']}")
+            
+            st.markdown("---")
+            st.success("这只是第一步。真正的监督者功能（保存进度、每日提醒）需要连接数据库。")
+
     if st.button("🔄 开始新的分析"):
         st.session_state.messages = []
         st.session_state.analysis_done = False
