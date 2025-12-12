@@ -269,6 +269,47 @@ else:
             st.markdown("---")
             st.success("这只是第一步。真正的监督者功能（保存进度、每日提醒）需要连接数据库。")
 
+# --- 10. (v2.2) 导出功能：把这一页变成文档带走 ---
+    st.markdown("---")
+    st.subheader("📥 存档你的创业蓝图")
+    
+    if st.session_state.analysis_done:
+        # 1. 拼接要导出的文本内容
+        report_content = f"""
+# 🚀 SoloForce 创业深度评估报告
+
+## 1. 基本信息
+- **创业点子**: {user_idea}
+- **创业者性格**: {user_mbti}
+- **评估时间**: 2025年...
+
+## 2. 核心打分
+- 💰 市场潜力: {st.session_state.current_scores['market']}/100
+- 🛠️ 技术难度: {st.session_state.current_scores['tech']}/100
+- ⚔️ 竞争程度: {st.session_state.current_scores['competition']}/100
+
+## 3. 深度分析
+{st.session_state.messages[1]['content']} 
+(注：以上为AI生成的详细分析)
+
+## 4. 7天启动清单 (Action Plan)
+"""
+        # 如果生成了计划，就拼接到文本里
+        if st.session_state.action_plan:
+            for item in st.session_state.action_plan:
+                report_content += f"- [ ] **Day {item['day']}**: {item['task']} (设计意图: {item['reason']})\n"
+        else:
+            report_content += "\n(暂未生成行动清单)"
+
+        # 2. 生成下载按钮
+        st.download_button(
+            label="📄 下载完整报告 (.md)",
+            data=report_content,
+            file_name="soloforce_plan.md",
+            mime="text/markdown"
+        )
+        st.caption("提示：下载后可以用 Notion、Obsidian 或任何 Markdown 阅读器打开。")
+
     if st.button("🔄 开始新的分析"):
         st.session_state.messages = []
         st.session_state.analysis_done = False
