@@ -3,93 +3,109 @@ import requests
 import json
 
 # 1. 页面配置
-st.set_page_config(page_title="AI 创业导师 (自适应版)", page_icon="🛡️")
-st.title("🛡️ SoloForce: 创业点子毒舌分析器")
-st.caption("自动检测可用模型，不再盲目猜测")
+st.set_page_config(page_title="AI 创业导师 (数据版)", page_icon="📊", layout="wide")
+st.title("📊 SoloForce: 创业点子毒舌分析器 v1.1")
+st.caption("AI 驱动的商业可行性评分系统")
 
 # 2. 获取 API Key
 api_key = st.text_input("请输入你的 Google Gemini API Key:", type="password")
 
-# 3. 动态获取模型列表 (这是新的魔法步骤)
+# 3. 动态获取模型列表
 available_models = []
 if api_key:
     try:
-        # 询问 Google: 你现在有哪些模型可用？
         list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
         resp = requests.get(list_url)
-        
         if resp.status_code == 200:
             data = resp.json()
-            # 筛选出支持生成的模型 (名字里带 generateContent 的)
-            # 或者简单点，筛选出名字里带 gemini 的
             for item in data.get('models', []):
                 if 'generateContent' in item.get('supportedGenerationMethods', []) and 'gemini' in item['name']:
                     available_models.append(item['name'])
-        else:
-            st.error(f"无法获取模型列表，请检查 API Key 是否正确。错误码: {resp.status_code}")
-    except Exception as e:
-        st.error(f"连接错误: {e}")
+    except:
+        pass
 
-# 4. 让用户选择模型 (如果没有获取到，就默认给一个备用)
 if available_models:
-    # 默认选第一个，通常是 flash
-    selected_model_name = st.selectbox("选择要使用的 AI 模型:", available_models, index=0)
+    # 默认尝试选 flash 或 pro
+    index = 0
+    for i, m in enumerate(available_models):
+        if 'flash' in m:
+            index = i
+            break
+    selected_model_name = st.selectbox("选择 AI 模型:", available_models, index=index)
 else:
-    # 备用方案，万一列表获取失败
-    st.warning("⚠️ 没能自动获取到模型列表，将尝试使用默认值。")
     selected_model_name = "models/gemini-1.5-flash" 
 
-# 5. 用户输入区
-user_idea = st.text_area("输入你想做的产品或服务：", height=150, 
-                         placeholder="例如：我想做一个专门给留学生用的二手家具交易平台...")
+# 4. 用户输入
+user_idea = st.text_area("输入你的创业想法：", height=100, 
+                         placeholder="例如：做一个专门给程序员用的相亲 App...")
 
-# 6. 核心逻辑
-if st.button("开始分析") and api_key and user_idea:
+# 5. 核心逻辑
+if st.button("生成评估报告") and api_key and user_idea:
     
-    with st.spinner(f'正在使用 {selected_model_name} 进行分析...'):
-        # 动态构建 URL
-        # 注意：selected_model_name 已经是 "models/xxxx" 的格式了，不需要再加 models/
-        # 但有些时候 API 返回的是 "models/gemini-1.5-flash"，而 URL 需要 .../models/gemini-1.5-flash:generateContent
-        
-        # 修正 URL 拼接逻辑
-        clean_model_name = selected_model_name.replace("models/", "")
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model_name}:generateContent?key={api_key}"
-        
-        headers = {'Content-Type': 'application/json'}
-        
-        prompt_text = f"""
-        你是一个极其严厉、说话直接的创业导师。
-        请针对用户的想法："{user_idea}"
-        
-        请做三件事：
-        1. 列出 3 个最致命的弱点。
-        2. 给出一个 pivot (转型) 建议。
-        3. 请用 Markdown 格式输出，条理清晰。
-        """
-        
-        data = {
-            "contents": [{
-                "parts": [{"text": prompt_text}]
-            }]
-        }
-        
+    clean_model_name = selected_model_name.replace("models/", "")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model_name}:generateContent?key={api_key}"
+    headers = {'Content-Type': 'application/json'}
+    
+    # 🔥 核心修改：要求 AI 返回严格的 JSON 格式
+    prompt_text = f"""
+    你是一个极其严厉的风险投资人。针对用户的想法："{user_idea}"
+    
+    请严格按照以下 JSON 格式输出，不要包含 Markdown 标记（如 ```json），直接返回纯 JSON 字符串：
+    {{
+        "market_score": (0-100之间的整数，表示市场潜力),
+        "tech_score": (0-100之间的整数，表示技术可行性),
+        "competition_score": (0-100之间的整数，表示竞争激烈程度，分越高越卷),
+        "critical_review": "这里写你的毒舌点评，列出3个致命弱点",
+        "pivot_suggestion": "这里写一个转型建议"
+    }}
+    """
+    
+    data = {"contents": [{"parts": [{"text": prompt_text}]}]}
+    
+    with st.spinner('正在进行多维度打分...'):
         try:
             response = requests.post(url, headers=headers, data=json.dumps(data))
-            
             if response.status_code == 200:
                 result_json = response.json()
+                raw_text = result_json['candidates'][0]['content']['parts'][0]['text']
+                
+                # 清洗数据，防止 AI 加了 ```json 前缀
+                clean_text = raw_text.replace("```json", "").replace("```", "").strip()
+                
+                # 解析 JSON
                 try:
-                    ai_text = result_json['candidates'][0]['content']['parts'][0]['text']
-                    st.markdown("### 📊 分析报告")
-                    st.markdown(ai_text)
-                    st.balloons() # 成功撒花！
+                    analysis = json.loads(clean_text)
+                    
+                    # --- 可视化展示区域 ---
                     st.success("分析完成！")
-                except:
-                    st.warning("结果生成了，但解析有点问题，原始内容如下：")
-                    st.json(result_json)
+                    
+                    # 1. 显示三个核心指标
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("💰 市场潜力", f"{analysis['market_score']}/100")
+                    col2.metric("🛠️ 技术难度", f"{analysis['tech_score']}/100")
+                    # 竞争分越高颜色越红，这里简单展示
+                    col3.metric("⚔️ 竞争程度", f"{analysis['competition_score']}/100")
+                    
+                    # 2. 进度条视觉辅助
+                    st.write("综合推荐指数：")
+                    # 简单算法：市场分 - 竞争分 + 技术分 (仅作演示)
+                    final_score = (analysis['market_score'] + analysis['tech_score'] + (100 - analysis['competition_score'])) / 3
+                    st.progress(int(final_score) / 100)
+                    
+                    # 3. 毒舌点评
+                    st.subheader("毒舌点评")
+                    st.error(analysis['critical_review'])
+                    
+                    # 4. 转型建议
+                    st.subheader("💡 转型建议")
+                    st.info(analysis['pivot_suggestion'])
+                    
+                except json.JSONDecodeError:
+                    st.error("AI 算晕了，返回的格式不对。请重试一下。")
+                    with st.expander("查看原始返回"):
+                        st.text(raw_text)
             else:
-                st.error(f"请求失败，状态码：{response.status_code}")
-                st.code(response.text) # 把错误详情打印出来
+                st.error("请求失败，请检查 API Key。")
                 
         except Exception as e:
             st.error(f"发生错误：{e}")
