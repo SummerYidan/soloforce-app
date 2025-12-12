@@ -17,22 +17,36 @@ if "current_scores" not in st.session_state:
 # --- 3. 辅助函数：强力 JSON 提取器 (关键修复) ---
 def extract_json(text):
     """
-    无论 AI 返回什么乱七八糟的文本，只提取第一个 { 到最后一个 } 之间的内容
+    🔥 增强版：同时支持提取 List [...] 和 Object {...}
     """
+    text = text.strip()
+    
+    # 1. 第一招：先试着简单粗暴地去掉 Markdown 标记
     try:
-        # 1. 尝试直接解析
-        return json.loads(text)
+        # 去掉 ```json 和 ``` 以及可能存在的首尾空白
+        clean_text = text.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean_text)
     except:
-        # 2. 如果失败，使用正则表达式寻找 JSON 对象
-        # 寻找第一个 '{' 和最后一个 '}'
+        pass # 如果失败，继续尝试第二招
+
+    # 2. 第二招：用正则找列表 [...] (对应7天计划)
+    try:
+        # re.DOTALL 让点号也能匹配换行符
+        match = re.search(r'\[.*\]', text, re.DOTALL)
+        if match:
+            return json.loads(match.group())
+    except:
+        pass
+
+    # 3. 第三招：用正则找对象 {...} (对应打分分析)
+    try:
         match = re.search(r'\{.*\}', text, re.DOTALL)
         if match:
-            json_str = match.group()
-            try:
-                return json.loads(json_str)
-            except:
-                return None
-        return None
+            return json.loads(match.group())
+    except:
+        pass
+        
+    return None
 
 # --- 4. 侧边栏配置 ---
 with st.sidebar:
